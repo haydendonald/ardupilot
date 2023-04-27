@@ -222,6 +222,32 @@ def get_ADC1_chan(mcu, pin):
         error("Unable to find ADC1 channel for pin %s" % pin)
     return ADC1_map[pin]
 
+def get_ADC2_chan(mcu, pin):
+    '''return ADC2 channel for an analog pin'''
+    import importlib
+    try:
+        lib = importlib.import_module(mcu)
+        ADC2_map = lib.ADC2_map
+    except ImportError:
+        error("Unable to find ADC2_Map for MCU %s" % mcu)
+
+    if pin not in ADC2_map:
+        error("Unable to find ADC2 channel for pin %s" % pin)
+    return ADC2_map[pin]
+
+def get_ADC3_chan(mcu, pin):
+    '''return ADC3 channel for an analog pin'''
+    import importlib
+    try:
+        lib = importlib.import_module(mcu)
+        ADC3_map = lib.ADC3_map
+    except ImportError:
+        error("Unable to find ADC3_Map for MCU %s" % mcu)
+
+    if pin not in ADC3_map:
+        error("Unable to find ADC3 channel for pin %s" % pin)
+    return ADC3_map[pin]
+
 
 class generic_pin(object):
     '''class to hold pin definition'''
@@ -589,6 +615,10 @@ class generic_pin(object):
             str += " AF%u" % self.af
         if self.type.startswith('ADC1'):
             str += " ADC1_IN%u" % get_ADC1_chan(mcu_type, self.portpin)
+        if self.type.startswith('ADC2'):
+            str += " ADC2_IN%u" % get_ADC2_chan(mcu_type, self.portpin)
+        if self.type.startswith('ADC3'):
+            str += " ADC3_IN%u" % get_ADC3_chan(mcu_type, self.portpin)
         if self.extra_value('PWM', type=int):
             str += " PWM%u" % self.extra_value('PWM', type=int)
         return "P%s%u %s %s%s" % (self.port, self.pin, self.label, self.type,
@@ -726,7 +756,7 @@ def get_ram_map():
                     if app_ram_map[0][0] == ram_map[i][0]:
                         env_vars['APP_RAM_START'] = i
             return ram_map
-    elif env_vars['EXT_FLASH_SIZE_MB']:
+    elif env_vars['EXT_FLASH_SIZE_MB'] and not env_vars['INT_FLASH_PRIMARY']:
         ram_map = get_mcu_config('RAM_MAP_EXTERNAL_FLASH', False)
         if ram_map is not None:
             return ram_map
@@ -970,8 +1000,8 @@ def write_mcu_config(f):
     f.write('#define EXT_FLASH_RESERVE_END_KB %u\n' % get_config('EXT_FLASH_RESERVE_END_KB', default=0, type=int))
 
     env_vars['EXT_FLASH_SIZE_MB'] = get_config('EXT_FLASH_SIZE_MB', default=0, type=int)
-
-    if env_vars['EXT_FLASH_SIZE_MB'] and not args.bootloader:
+    env_vars['INT_FLASH_PRIMARY'] = get_config('INT_FLASH_PRIMARY', default=False, type=bool)
+    if env_vars['EXT_FLASH_SIZE_MB'] and not args.bootloader and not env_vars['INT_FLASH_PRIMARY']:
         f.write('#define CRT0_AREAS_NUMBER 3\n')
         f.write('#define CRT1_RAMFUNC_ENABLE TRUE\n') # this will enable loading program sections to RAM
         f.write('#define __FASTRAMFUNC__ __attribute__ ((__section__(".fastramfunc")))\n')
@@ -980,6 +1010,13 @@ def write_mcu_config(f):
     else:
         f.write('#define CRT0_AREAS_NUMBER 1\n')
         f.write('#define CRT1_RAMFUNC_ENABLE FALSE\n')
+
+    if env_vars['INT_FLASH_PRIMARY']:
+         # this will put methods with low latency requirements into external flash
+         # and save internal flash space
+        f.write('#define __EXTFLASHFUNC__ __attribute__ ((__section__(".extflash")))\n')
+    else:
+        f.write('#define __EXTFLASHFUNC__\n')
 
     storage_flash_page = get_storage_flash_page()
     flash_reserve_end = get_config('FLASH_RESERVE_END_KB', default=0, type=int)
@@ -1004,7 +1041,7 @@ def write_mcu_config(f):
         env_vars['ENABLE_CRASHDUMP'] = 0
 
     if args.bootloader:
-        if env_vars['EXT_FLASH_SIZE_MB']:
+        if env_vars['EXT_FLASH_SIZE_MB'] and not env_vars['INT_FLASH_PRIMARY']:
             f.write('\n// location of loaded firmware in external flash\n')
             f.write('#define APP_START_ADDRESS 0x%08x\n' % (0x90000000 + get_config(
                 'EXT_FLASH_RESERVE_START_KB', default=0, type=int)*1024))
@@ -1276,6 +1313,7 @@ def write_ldscript(fname):
 
     # get external flash if any
     ext_flash_size = get_config('EXT_FLASH_SIZE_MB', default=0, type=int)
+    int_flash_primary = get_config('INT_FLASH_PRIMARY', default=False, type=int)
 
     if not args.bootloader:
         flash_length = flash_size - (flash_reserve_start + flash_reserve_end)
@@ -1290,6 +1328,9 @@ def write_ldscript(fname):
     f = open(fname, 'w')
     ram0_start = ram_map[0][0]
     ram0_len = ram_map[0][1] * 1024
+    if ext_flash_size > 32:
+        error("We only support 24bit addressing over external flash")
+
     if env_vars['APP_RAM_START'] is None:
         # default to start of ram for shared ram
         # possibly reserve some memory for app/bootloader comms
@@ -1307,9 +1348,19 @@ MEMORY
 
 INCLUDE common.ld
 ''' % (flash_base, flash_length, ram0_start, ram0_len))
+    elif int_flash_primary:
+        env_vars['HAS_EXTERNAL_FLASH_SECTIONS'] = 1
+        f.write('''/* generated ldscript.ld */
+MEMORY
+{
+    flash : org = 0x%08x, len = %uK
+    ext_flash : org = 0x%08x, len = %uK
+    ram0  : org = 0x%08x, len = %u
+}
+
+INCLUDE common_mixf.ld
+''' % (flash_base, flash_length, ext_flash_base, ext_flash_length, ram0_start, ram0_len))
     else:
-        if ext_flash_size > 32:
-            error("We only support 24bit addressing over external flash")
         env_vars['HAS_EXTERNAL_FLASH_SECTIONS'] = 1
         f.write('''/* generated ldscript.ld */
 MEMORY
@@ -1333,6 +1384,9 @@ def copy_common_linkerscript(outdir):
     if not get_config('EXT_FLASH_SIZE_MB', default=0, type=int) or args.bootloader:
         shutil.copy(os.path.join(dirpath, "../common/common.ld"),
                     os.path.join(outdir, "common.ld"))
+    elif get_config('INT_FLASH_PRIMARY', default=False, type=int):
+        shutil.copy(os.path.join(dirpath, "../common/common_mixf.ld"),
+                    os.path.join(outdir, "common_mixf.ld"))
     else:
         shutil.copy(os.path.join(dirpath, "../common/common_extf.ld"),
                     os.path.join(outdir, "common_extf.ld"))
@@ -2160,34 +2214,99 @@ def write_PWM_config(f, ordered_timers):
 def write_ADC_config(f):
     '''write ADC config defines'''
     f.write('// ADC config\n')
-    adc_chans = []
+    adc_chans = [[], [], []]
+    analogset = {252, 253, 254} # reserved values for VSENSE, VREF and VBAT in H7
     for l in bylabel:
         p = bylabel[l]
         if not p.type.startswith('ADC'):
             continue
-        chan = get_ADC1_chan(mcu_type, p.portpin)
+        if p.type.startswith('ADC1'):
+            index = 0
+            chan = get_ADC1_chan(mcu_type, p.portpin)
+        elif p.type.startswith('ADC2'):
+            index = 1
+            chan = get_ADC2_chan(mcu_type, p.portpin)
+        elif p.type.startswith('ADC3'):
+            index = 2
+            chan = get_ADC3_chan(mcu_type, p.portpin)
+        else:
+            raise ValueError("Unknown ADC type %s" % p.type)
         scale = p.extra_value('SCALE', default=None)
+        analog = p.extra_value('ANALOG', type=int, default=chan) # default to ADC channel if not specified
+        if analog in analogset:
+            error("Duplicate analog pin %u" % analog)
+        analogset.add(analog)
         if p.label == 'VDD_5V_SENS':
-            f.write('#define ANALOG_VCC_5V_PIN %u\n' % chan)
+            f.write('#define ANALOG_VCC_5V_PIN %u\n' % (analog))
             f.write('#define HAL_HAVE_BOARD_VOLTAGE 1\n')
         if p.label == 'FMU_SERVORAIL_VCC_SENS':
-            f.write('#define FMU_SERVORAIL_ADC_CHAN %u\n' % chan)
+            f.write('#define FMU_SERVORAIL_ADC_PIN %u\n' % (analog))
             f.write('#define HAL_HAVE_SERVO_VOLTAGE 1\n')
-        adc_chans.append((chan, scale, p.label, p.portpin))
-    adc_chans = sorted(adc_chans)
+        adc_chans[index].append((chan, analog, scale, p.label, p.portpin))
+    
+    # sort by ADC channel
+    for index in range(3):
+        adc_chans[index] = sorted(adc_chans[index])
+    
+    if len(adc_chans[1]) > 0:
+        # ensure ADC1 and ADC2 are of same size
+        if len(adc_chans[0]) > len(adc_chans[1]):
+            # add dummy channel that's not already in adc_chans[1]
+            for chan in range(1,19):
+                if chan not in [c[0] for c in adc_chans[1]]:
+                    adc_chans[1].append((chan, 255, None, 'dummy', 'dummy'))
+                    break
+        elif len(adc_chans[0]) < len(adc_chans[1]):
+            # add dummy channel that's not already in adc_chans[0]
+            for chan in range(1,19):
+                if chan not in [c[0] for c in adc_chans[0]]:
+                    adc_chans[0].append((chan, 255, None, 'dummy', 'dummy'))
+                    break
+        # check if ADC1 and ADC2 list if they have the same channel for same index
+        # if not then jumble the channels around to have no matching channels
+        for i in range(len(adc_chans[0])):
+            if adc_chans[0][i][0] == adc_chans[1][i][0]:
+                # found a match, jumble the channels around
+                for j in range(len(adc_chans[0])):
+                    if adc_chans[0][j][0] != adc_chans[1][j][0]:
+                        # found a non-match, swap the channels
+                        adc_chans[0][i], adc_chans[0][j] = adc_chans[0][j], adc_chans[0][i]
+                        break
+
     vdd = get_config('STM32_VDD', default='330U')
     if vdd[-1] == 'U':
         vdd = vdd[:-1]
     vdd = float(vdd) * 0.01
-    f.write('#define HAL_ANALOG_PINS { \\\n')
-    for (chan, scale, label, portpin) in adc_chans:
+    f.write('#define HAL_ANALOG_PINS \\\n')
+    for (chan, analog, scale, label, portpin) in adc_chans[0]:
         scale_str = '%.2f/4096' % vdd
         if scale is not None and scale != '1':
             scale_str = scale + '*' + scale_str
-        f.write('{ %2u, %12s }, /* %s %s */ \\\n' % (chan, scale_str, portpin,
+        f.write('{ %2u, %2u, %12s }, /* %s %s */ \\\n' % (chan, analog, scale_str,  portpin,
                                                      label))
-    f.write('}\n\n')
-
+    f.write('\n\n')
+    if len(adc_chans[1]) > 0:
+        f.write('#define STM32_ADC_SAMPLES_SIZE 32\n')
+        f.write('#define ADC12_CCR_DUAL ADC_CCR_DUAL_REG_INTERL\n')
+        f.write('#define STM32_ADC_DUAL_MODE TRUE\n')
+        f.write('#define HAL_ANALOG2_PINS \\\n')
+        for (chan, analog, scale, label, portpin) in adc_chans[1]:
+            scale_str = '%.2f/4096' % vdd
+            if scale is not None and scale != '1':
+                scale_str = scale + '*' + scale_str
+            f.write('{ %2u, %2u, %12s }, /* %s %s */ \\\n' % (chan, analog, scale_str, portpin,
+                                                        label))
+        f.write('\n\n')
+    if len(adc_chans[2]) > 0:
+        f.write('#define STM32_ADC_USE_ADC3 TRUE\n')    
+        f.write('#define HAL_ANALOG3_PINS \\\n')
+        for (chan, analog, scale, label, portpin) in adc_chans[2]:
+            scale_str = '%.2f/4096' % vdd
+            if scale is not None and scale != '1':
+                scale_str = scale + '*' + scale_str
+            f.write('{ %2u, %2u, %12s }, /* %s %s */ \\\n' % (chan, analog, scale_str, portpin,
+                                                        label))
+        f.write('\n\n')
 
 def write_GPIO_config(f):
     '''write GPIO config defines'''
@@ -2262,21 +2381,23 @@ def bootloader_path():
                                    "Tools",
                                    "bootloaders",
                                    bootloader_filename)
-    if os.path.exists(bootloader_path):
-        return os.path.realpath(bootloader_path)
-
-    return None
+    return bootloader_path
 
 
-def add_bootloader():
+def embed_bootloader(f):
     '''added bootloader to ROMFS'''
-    bp = bootloader_path()
-    if bp is not None and int(get_config('BOOTLOADER_EMBED', required=False, default='1')):
-        romfs["bootloader.bin"] = bp
-        env_vars['BOOTLOADER_EMBED'] = 1
-    else:
-        env_vars['BOOTLOADER_EMBED'] = 0
+    if not intdefines.get('AP_BOOTLOADER_FLASHING_ENABLED', 1):
+        # or, you know, not...
+        return
 
+    bp = bootloader_path()
+    if not os.path.exists(bp):
+        return
+
+    bp = os.path.realpath(bp)
+
+    romfs["bootloader.bin"] = bp
+    f.write("#define AP_BOOTLOADER_FLASHING_ENABLED 1\n")
 
 
 def write_ROMFS(outdir):
@@ -2440,7 +2561,7 @@ def write_hwdef_header(outfilename):
     setup_apj_IDs()
     write_USB_config(f)
 
-    add_bootloader()
+    embed_bootloader(f)
 
     if len(romfs) > 0:
         f.write('#define HAL_HAVE_AP_ROMFS_EMBEDDED_H 1\n')
