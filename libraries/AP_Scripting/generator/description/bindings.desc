@@ -635,6 +635,10 @@ singleton AP_IOMCU depends HAL_WITH_IO_MCU
 singleton AP_IOMCU rename iomcu
 singleton AP_IOMCU method healthy boolean
 
+include AP_Compass/AP_Compass.h
+singleton Compass rename compass
+singleton Compass method healthy boolean uint8_t 0 COMPASS_MAX_INSTANCES
+
 -- ----EFI Library----
 include AP_EFI/AP_EFI.h depends HAL_EFI_ENABLED
 include AP_EFI/AP_EFI_Scripting.h depends AP_EFI_SCRIPTING_ENABLED
