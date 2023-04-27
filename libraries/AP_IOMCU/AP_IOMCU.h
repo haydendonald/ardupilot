@@ -5,6 +5,7 @@
   but will later move to an ArduPilot specific protocol
  */
 
+#pragma once
 #include <AP_HAL/AP_HAL.h>
 
 #if HAL_WITH_IO_MCU
