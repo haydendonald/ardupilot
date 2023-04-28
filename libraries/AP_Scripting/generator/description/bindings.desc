@@ -334,7 +334,6 @@ singleton AP_Baro method get_pressure float
 singleton AP_Baro method get_temperature float
 singleton AP_Baro method get_external_temperature float
 singleton AP_Baro method get_altitude float
-singleton AP_Baro method all_healthy boolean
 singleton AP_Baro method healthy boolean uint8_t 0 BARO_MAX_INSTANCES
 
 include AP_OpticalFlow/AP_OpticalFlow.h
@@ -516,15 +515,8 @@ include AP_InertialSensor/AP_InertialSensor.h
 singleton AP_InertialSensor rename ins
 singleton AP_InertialSensor method get_temperature float uint8_t 0 INS_MAX_INSTANCES
 singleton AP_InertialSensor method healthy boolean
-singleton AP_InertialSensor method get_gyro_count uint8_t
 singleton AP_InertialSensor method get_gyro_health boolean uint8_t 0 INS_MAX_INSTANCES
-singleton AP_InertialSensor method get_gyro_health_all boolean
-singleton AP_InertialSensor method gyro_calibrated_ok boolean uint8_t 0 INS_MAX_INSTANCES
-singleton AP_InertialSensor method gyro_calibrated_ok_all boolean
-singleton AP_InertialSensor method get_accel_count uint8_t
 singleton AP_InertialSensor method get_accel_health boolean uint8_t 0 INS_MAX_INSTANCES
-singleton AP_InertialSensor method get_accel_health_all boolean
-singleton AP_InertialSensor method accel_calibrated_ok_all boolean
 
 singleton CAN manual get_device lua_get_CAN_device 1
 singleton CAN manual get_device2 lua_get_CAN_device2 1
