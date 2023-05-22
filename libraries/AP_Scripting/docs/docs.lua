@@ -1351,10 +1351,6 @@ ins = {}
 ---@return number
 function ins:get_temperature(instance) end
 
--- Check if the inertial sensor is healthy
----@return boolean
-function ins:healthy() end
-
 -- Check if a specific gyrometer sensor is healthy
 ---@param instance integer -- the 0-based index of the gyrometer instance to return.
 ---@return boolean
