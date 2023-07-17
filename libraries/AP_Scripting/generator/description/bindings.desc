@@ -649,6 +649,11 @@ include AP_Compass/AP_Compass.h
 singleton Compass rename compass
 singleton Compass method healthy boolean uint8_t'skip_check
 
+include AP_Filesystem/AP_Filesystem.h
+singleton AP_Filesystem rename fs
+singleton AP_Filesystem method format boolean
+singleton AP_Filesystem method get_format_status uint8_t'skip_check
+
 -- ----EFI Library----
 include AP_EFI/AP_EFI.h depends HAL_EFI_ENABLED
 include AP_EFI/AP_EFI_Scripting.h depends AP_EFI_SCRIPTING_ENABLED
