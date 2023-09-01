@@ -203,6 +203,7 @@ class Context(object):
         self.original_heartbeat_interval_ms = None
         self.installed_scripts = []
         self.installed_modules = []
+        self.overridden_message_rates = {}
 
 
 # https://stackoverflow.com/questions/616645/how-do-i-duplicate-sys-stdout-to-a-log-file-in-python
@@ -2135,26 +2136,11 @@ class AutoTest(ABC):
     def get_sim_parameter_documentation_get_whitelist(self):
         # common parameters
         ret = set([
-            "SIM_ACC1_BIAS_X",
-            "SIM_ACC1_BIAS_Y",
-            "SIM_ACC1_BIAS_Z",
             "SIM_ACC1_RND",
-            "SIM_ACC2_BIAS_X",
-            "SIM_ACC2_BIAS_Y",
-            "SIM_ACC2_BIAS_Z",
             "SIM_ACC2_RND",
-            "SIM_ACC3_BIAS_X",
-            "SIM_ACC3_BIAS_Y",
-            "SIM_ACC3_BIAS_Z",
             "SIM_ACC3_RND",
             "SIM_ACC4_RND",
-            "SIM_ACC4_BIAS_X",
-            "SIM_ACC4_BIAS_Y",
-            "SIM_ACC4_BIAS_Z",
             "SIM_ACC5_RND",
-            "SIM_ACC5_BIAS_X",
-            "SIM_ACC5_BIAS_Y",
-            "SIM_ACC5_BIAS_Z",
             "SIM_ACC_FILE_RW",
             "SIM_ACC_TRIM_X",
             "SIM_ACC_TRIM_Y",
@@ -2227,7 +2213,6 @@ class AutoTest(ABC):
             "SIM_GND_BEHAV",
             "SIM_GPS2_ACC",
             "SIM_GPS2_ALT_OFS",
-            "SIM_GPS2_BYTELOS",
             "SIM_GPS2_DRFTALT",
             "SIM_GPS2_GLTCH_X",
             "SIM_GPS2_GLTCH_Y",
@@ -2237,7 +2222,6 @@ class AutoTest(ABC):
             "SIM_GPS2_LAG_MS",
             "SIM_GPS2_LCKTIME",
             "SIM_GPS2_NOISE",
-            "SIM_GPS2_NUMSATS",
             "SIM_GPS2_POS_X",
             "SIM_GPS2_POS_Y",
             "SIM_GPS2_POS_Z",
@@ -2246,7 +2230,6 @@ class AutoTest(ABC):
             "SIM_GPS2_VERR_Z",
             "SIM_GPS_ACC",
             "SIM_GPS_ALT_OFS",
-            "SIM_GPS_BYTELOSS",
             "SIM_GPS_DRIFTALT",
             "SIM_GPS_GLITCH_X",
             "SIM_GPS_GLITCH_Y",
@@ -2257,7 +2240,6 @@ class AutoTest(ABC):
             "SIM_GPS_LOCKTIME",
             "SIM_GPS_LOG_NUM",
             "SIM_GPS_NOISE",
-            "SIM_GPS_NUMSATS",
             "SIM_GPS_POS_X",
             "SIM_GPS_POS_Y",
             "SIM_GPS_POS_Z",
@@ -3420,6 +3402,14 @@ class AutoTest(ABC):
             raise NotAchievedException("Air Temperature not received from HIGH_LATENCY2")
         self.HIGH_LATENCY2_links()
 
+    def context_set_message_rate_hz(self, id, rate_hz):
+        overridden_message_rates = self.context_get().overridden_message_rates
+
+        if id not in overridden_message_rates:
+            overridden_message_rates[id] = self.get_message_rate(id)
+
+        self.set_message_rate_hz(id, rate_hz)
+
     def HIGH_LATENCY2_links(self):
 
         self.start_subtest("SerialProtocol_MAVLinkHL links")
@@ -4477,13 +4467,14 @@ class AutoTest(ABC):
                 raise ValueError("count %u not handled" % count)
         self.progress("Rally content same")
 
-    def load_rally(self, filename):
+    def load_rally_using_mavproxy(self, filename):
         """Load rally points from a file to flight controller."""
         self.progress("Loading rally points (%s)" % filename)
         path = os.path.join(testdir, self.current_test_name_directory, filename)
         mavproxy = self.start_mavproxy()
         mavproxy.send('rally load %s\n' % path)
         mavproxy.expect("Loaded")
+        self.delay_sim_time(10)  # allow transfer to complete
         self.stop_mavproxy(mavproxy)
 
     def load_sample_mission(self):
@@ -5623,6 +5614,8 @@ class AutoTest(ABC):
             self.remove_message_hook(hook)
         for script in dead.installed_scripts:
             self.remove_installed_script(script)
+        for (message_id, interval_us) in dead.overridden_message_rates.items():
+            self.set_message_interval(message_id, interval_us)
         for module in dead.installed_modules:
             print("Removing module (%s)" % module)
             self.remove_installed_modules(module)
@@ -5693,6 +5686,7 @@ class AutoTest(ABC):
                     p5=None,
                     p6=None,
                     p7=None,
+                    quiet=False,
                     ):
 
         if p5 is not None:
@@ -5710,6 +5704,23 @@ class AutoTest(ABC):
         self.get_sim_time() # required for timeout in run_cmd_get_ack to work
 
         """Send a MAVLink command int."""
+        if not quiet:
+            try:
+                command_name = mavutil.mavlink.enums["MAV_CMD"][command].name
+            except KeyError:
+                command_name = "UNKNOWN=%u" % command
+            self.progress("Sending COMMAND_INT to (%u,%u) (%s) (p1=%f p2=%f p3=%f p4=%f p5=%u p6=%u  p7=%f)" %
+                          (
+                              target_sysid,
+                              target_compid,
+                              command_name,
+                              p1,
+                              p2,
+                              p3,
+                              p4,
+                              x,
+                              y,
+                              z))
         self.mav.mav.command_int_send(target_sysid,
                                       target_compid,
                                       frame,
@@ -5746,11 +5757,11 @@ class AutoTest(ABC):
             target_sysid = self.sysid_thismav()
         if target_compid is None:
             target_compid = 1
-        try:
-            command_name = mavutil.mavlink.enums["MAV_CMD"][command].name
-        except KeyError:
-            command_name = "UNKNOWN=%u" % command
         if not quiet:
+            try:
+                command_name = mavutil.mavlink.enums["MAV_CMD"][command].name
+            except KeyError:
+                command_name = "UNKNOWN=%u" % command
             self.progress("Sending COMMAND_LONG to (%u,%u) (%s) (p1=%f p2=%f p3=%f p4=%f p5=%f p6=%f  p7=%f)" %
                           (
                               target_sysid,
@@ -6408,6 +6419,10 @@ class AutoTest(ABC):
             **kwargs
         )
 
+    def groundspeed(self):
+        m = self.assert_receive_message('VFR_HUD')
+        return m.groundspeed
+
     def wait_groundspeed(self, speed_min, speed_max, timeout=30, **kwargs):
         self.wait_vfr_hud_speed("groundspeed", speed_min, speed_max, timeout=timeout, **kwargs)
 
@@ -6601,7 +6616,10 @@ class AutoTest(ABC):
         while self.get_sim_time_cached() < tstart + timeout:  # if we failed to received message with the getter the sim time isn't updated  # noqa
             last_value = current_value_getter()
             if called_function is not None:
-                called_function(last_value, target)
+                if print_diagnostics_as_target_not_range:
+                    called_function(last_value, target)
+                else:
+                    called_function(last_value, minimum, maximum)
             if validator is not None:
                 if print_diagnostics_as_target_not_range:
                     is_value_valid = validator(last_value, target)
@@ -8050,10 +8068,11 @@ Also, ignores heartbeats not from our target system'''
         count = 0
         for sup_binary in self.sup_binaries:
             self.progress("Starting Supplementary Program ", sup_binary)
-            start_sitl_args["customisations"] = [sup_binary[1]]
+            start_sitl_args["customisations"] = [sup_binary['customisation']]
             start_sitl_args["supplementary"] = True
-            start_sitl_args["stdout_prefix"] = "%s-%u" % (os.path.basename(sup_binary[0]), count)
-            sup_prog_link = util.start_SITL(sup_binary[0], **start_sitl_args)
+            start_sitl_args["stdout_prefix"] = "%s-%u" % (os.path.basename(sup_binary['binary']), count)
+            start_sitl_args["defaults_filepath"] = sup_binary['param_file']
+            sup_prog_link = util.start_SITL(sup_binary['binary'], **start_sitl_args)
             self.sup_prog.append(sup_prog_link)
             self.expect_list_add(sup_prog_link)
             count += 1
@@ -8096,25 +8115,18 @@ Also, ignores heartbeats not from our target system'''
             "callgrind": self.callgrind,
             "wipe": True,
         }
-        if instance is None:
-            for sup_binary in self.sup_binaries:
-                start_sitl_args["customisations"] = [sup_binary[1]]
-                if args is not None:
-                    start_sitl_args["customisations"] = [sup_binary[1], args]
-                start_sitl_args["supplementary"] = True
-                sup_prog_link = util.start_SITL(sup_binary[0], **start_sitl_args)
-                time.sleep(3)
-                self.sup_prog.append(sup_prog_link) # add to list
-                self.expect_list_add(sup_prog_link) # add to expect list
-        else:
-            # start only the instance passed
-            start_sitl_args["customisations"] = [self.sup_binaries[instance][1]]
+        for i in range(len(self.sup_binaries)):
+            if instance is not None and instance != i:
+                continue
+            sup_binary = self.sup_binaries[i]
+            start_sitl_args["customisations"] = [sup_binary['customisation']]
             if args is not None:
-                start_sitl_args["customisations"] = [self.sup_binaries[instance][1], args]
+                start_sitl_args["customisations"] = [sup_binary['customisation'], args]
             start_sitl_args["supplementary"] = True
-            sup_prog_link = util.start_SITL(self.sup_binaries[instance][0], **start_sitl_args)
-            time.sleep(3)
-            self.sup_prog[instance] = sup_prog_link # add to list
+            start_sitl_args["defaults_filepath"] = sup_binary['param_file']
+            sup_prog_link = util.start_SITL(sup_binary['binary'], **start_sitl_args)
+            time.sleep(1)
+            self.sup_prog[i] = sup_prog_link # add to list
             self.expect_list_add(sup_prog_link) # add to expect list
 
     def sitl_is_running(self):
@@ -9744,6 +9756,25 @@ Also, ignores heartbeats not from our target system'''
             0,
             0,
             0)
+
+    def get_message_interval(self, victim_message, mav=None):
+        '''returns message interval in microseconds'''
+        self.send_get_message_interval(victim_message, mav=mav)
+        m = self.assert_receive_message('MESSAGE_INTERVAL', timeout=1, mav=mav)
+        if m.message_id != victim_message:
+            raise NotAchievedException("Unexpected ID in MESSAGE_INTERVAL")
+        return m.interval_us
+
+    def set_message_interval(self, victim_message, interval_us, mav=None):
+        '''sets message interval in microseconds'''
+        if type(victim_message) == str:
+            victim_message = eval("mavutil.mavlink.MAVLINK_MSG_ID_%s" % victim_message)
+        self.run_cmd(
+            mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
+            p1=victim_message,
+            p2=interval_us,
+            mav=mav,
+        )
 
     def test_rate(self,
                   desc,
@@ -12657,8 +12688,8 @@ switch value'''
         # grab a battery-remaining percentage
         self.run_cmd(
             mavutil.mavlink.MAV_CMD_BATTERY_RESET,
-            p1=255,  # battery mask
-            p2=96,   # percentage
+            p1=65535,   # battery mask
+            p2=96,      # percentage
         )
         m = self.assert_receive_message('BATTERY_STATUS', timeout=1)
         want_battery_remaining_pct = m.battery_remaining
@@ -12953,6 +12984,7 @@ switch value'''
         })
         self.assert_prearm_failure("Compasses inconsistent")
         self.context_pop()
+        self.wait_ready_to_arm()
 
     def AHRS_ORIENTATION(self):
         '''test AHRS_ORIENTATION parameter works'''

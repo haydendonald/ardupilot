@@ -17,8 +17,6 @@
     SITL.cpp - software in the loop state
 */
 
-#define ALLOW_DOUBLE_MATH_FUNCTIONS
-
 #include "SITL.h"
 
 #if AP_SIM_ENABLED
@@ -99,6 +97,32 @@ const AP_Param::GroupInfo SIM::var_info[] = {
     // @Description: If set, if a numerical error occurs SITL will die with a floating point exception.
     // @User: Advanced
     AP_GROUPINFO("FLOAT_EXCEPT",  28, SIM,  float_exception, 1),
+
+    // @Param: CAN_SRV_MSK
+    // @DisplayName: Mask of CAN servos/ESCs
+    // @Description: The set of actuators controlled externally by CAN SITL AP_Periph
+    // @Bitmask: 0: Servo 1, 1: Servo 2, 2: Servo 3, 3: Servo 4, 4: Servo 5, 5: Servo 6, 6: Servo 7, 7: Servo 8, 8: Servo 9, 9: Servo 10, 10: Servo 11, 11: Servo 12, 12: Servo 13, 13: Servo 14, 14: Servo 15, 15: Servo 16, 16: Servo 17, 17: Servo 18, 18: Servo 19, 19: Servo 20, 20: Servo 21, 21: Servo 22, 22: Servo 23, 23: Servo 24, 24: Servo 25, 25: Servo 26, 26: Servo 27, 27: Servo 28, 28: Servo 29, 29: Servo 30, 30: Servo 31, 31: Servo 32
+    // @User: Advanced
+    AP_GROUPINFO("CAN_SRV_MSK",   29, SIM,  can_servo_mask, 0),
+
+#if HAL_NUM_CAN_IFACES > 0
+    // @Param: CAN_TYPE1
+    // @DisplayName: transport type for first CAN interface
+    // @Description: transport type for first CAN interface
+    // @Values: 0:MulticastUDP,1:SocketCAN
+    // @User: Advanced
+    AP_GROUPINFO("CAN_TYPE1", 30, SIM,  can_transport[0], uint8_t(CANTransport::MulticastUDP)),
+#endif
+
+#if HAL_NUM_CAN_IFACES > 1
+    // @Param: CAN_TYPE2
+    // @DisplayName: transport type for second CAN interface
+    // @Description: transport type for second CAN interface
+    // @Values: 0:MulticastUDP,1:SocketCAN
+    // @User: Advanced
+    AP_GROUPINFO("CAN_TYPE2", 31, SIM,  can_transport[1], uint8_t(CANTransport::MulticastUDP)),
+#endif
+
     AP_GROUPINFO("SONAR_SCALE",   32, SIM,  sonar_scale, 12.1212f),
     AP_GROUPINFO("FLOW_ENABLE",   33, SIM,  flow_enable, 0),
     AP_GROUPINFO("TERRAIN",       34, SIM,  terrain_enable, 1),
@@ -445,7 +469,14 @@ const AP_Param::GroupInfo SIM::var_gps[] = {
     // @Values: 0:None, 1:UBlox, 5:NMEA, 6:SBP, 7:File, 8:Nova, 9:SBP, 10:GSOF, 19:MSP
     // @User: Advanced
     AP_GROUPINFO("GPS_TYPE",       3, SIM,  gps_type[0],  GPS::Type::UBLOX),
+    // @Param: GPS_BYTELOSS
+    // @DisplayName: GPS Byteloss
+    // @Description: Percent of bytes lost from GPS 1
+    // @User: Advanced
     AP_GROUPINFO("GPS_BYTELOSS",   4, SIM,  gps_byteloss[0],  0),
+    // @Param: GPS_NUMSATS
+    // @DisplayName: GPS 1 Num Satellites
+    // @Description: Number of satellites GPS 1 has in view
     AP_GROUPINFO("GPS_NUMSATS",    5, SIM,  gps_numsats[0],   10),
     AP_GROUPINFO("GPS_GLITCH",     6, SIM,  gps_glitch[0],  0),
     AP_GROUPINFO("GPS_HZ",         7, SIM,  gps_hertz[0],  5),
@@ -469,7 +500,14 @@ const AP_Param::GroupInfo SIM::var_gps[] = {
     // @DisplayName: GPS 2 type
     // @Description: Sets the type of simulation used for GPS 2
     AP_GROUPINFO("GPS2_TYPE",     32, SIM,  gps_type[1],  GPS::Type::UBLOX),
+    // @Param: GPS2_BYTELOS
+    // @DisplayName: GPS 2 Byteloss
+    // @Description: Percent of bytes lost from GPS 2
+    // @User: Advanced
     AP_GROUPINFO("GPS2_BYTELOS",  33, SIM,  gps_byteloss[1],  0),
+    // @Param: GPS2_NUMSATS
+    // @DisplayName: GPS 2 Num Satellites
+    // @Description: Number of satellites GPS 2 has in view
     AP_GROUPINFO("GPS2_NUMSATS",  34, SIM,  gps_numsats[1],   10),
     AP_GROUPINFO("GPS2_GLTCH",    35, SIM,  gps_glitch[1],  0),
     AP_GROUPINFO("GPS2_HZ",       36, SIM,  gps_hertz[1],  5),
@@ -586,11 +624,24 @@ const AP_Param::GroupInfo SIM::var_ins[] = {
     AP_GROUPINFO("IMUT_TCONST",   3, SIM, imu_temp_tconst, 300),
     AP_GROUPINFO("IMUT_FIXED",    4, SIM, imu_temp_fixed, 0),
 #endif
+    // @Param: ACC1_BIAS
+    // @DisplayName: Accel 1 bias
+    // @Description: bias of simulated accelerometer sensor
+    // @User: Advanced
+    // @Vector3Parameter: 1
     AP_GROUPINFO("ACC1_BIAS",     5, SIM, accel_bias[0], 0),
 #if INS_MAX_INSTANCES > 1
+    // @Param: ACC2_BIAS
+    // @DisplayName: Accel 2 bias
+    // @CopyFieldsFrom: SIM_ACC1_BIAS
+    // @Vector3Parameter: 1
     AP_GROUPINFO("ACC2_BIAS",     6, SIM, accel_bias[1], 0),
 #endif
 #if INS_MAX_INSTANCES > 2
+    // @Param: ACC3_BIAS
+    // @DisplayName: Accel 3 bias
+    // @CopyFieldsFrom: SIM_ACC1_BIAS
+    // @Vector3Parameter: 1
     AP_GROUPINFO("ACC3_BIAS",     7, SIM, accel_bias[2], 0),
 #endif
     AP_GROUPINFO("GYR1_RND",      8, SIM, gyro_noise[0],  0),
@@ -786,6 +837,10 @@ const AP_Param::GroupInfo SIM::var_ins[] = {
 
     AP_GROUPINFO("GYR4_RND",     38, SIM, gyro_noise[3],  0),
 
+    // @Param: ACC4_BIAS
+    // @DisplayName: Accel 4 bias
+    // @CopyFieldsFrom: SIM_ACC1_BIAS
+    // @Vector3Parameter: 1
     AP_GROUPINFO("ACC4_BIAS",    39, SIM, accel_bias[3], 0),
 
     // @Param: GYR4_BIAS_X
@@ -832,6 +887,10 @@ const AP_Param::GroupInfo SIM::var_ins[] = {
 
     AP_GROUPINFO("GYR5_RND",     45, SIM, gyro_noise[4],  0),
 
+    // @Param: ACC5_BIAS
+    // @DisplayName: Accel 5 bias
+    // @CopyFieldsFrom: SIM_ACC1_BIAS
+    // @Vector3Parameter: 1
     AP_GROUPINFO("ACC5_BIAS",    46, SIM, accel_bias[4], 0),
 
     // @Param: GYR5_BIAS_X
@@ -1015,7 +1074,7 @@ float SIM::get_rangefinder(uint8_t instance) {
     if (instance < ARRAY_SIZE(state.rangefinder_m)) {
         return state.rangefinder_m[instance];
     }
-    return -1;
+    return nanf("");
 };
 
 float SIM::measure_distance_at_angle_bf(const Location &location, float angle) const
