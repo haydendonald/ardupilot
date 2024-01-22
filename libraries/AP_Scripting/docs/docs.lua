@@ -2761,6 +2761,10 @@ function notify:handle_rgb(red, green, blue, rate_hz) end
 ---@param tune string
 function notify:play_tune(tune) end
 
+-- desc
+---@param text string
+---@param row integer
+function notify:send_text(text, row) end
 
 -- desc
 ---@class gps
