@@ -28,6 +28,7 @@
 #define BUZZER_ON       1
 #define BUZZER_OFF      0
 
+#define NOTIFY_TEXT_NUM_ROWS 6
 #define NOTIFY_TEXT_BUFFER_SIZE 51
 
 //Type of on-board display
@@ -210,6 +211,10 @@ public:
     void send_text(const char *str);
     const char* get_text() const { return _send_text; }
     uint32_t get_text_updated_millis() const {return _send_text_updated_millis; }
+ 
+    // send text to the display using scripting
+    void send_text_src(const char *str, uint8_t r);
+    const char* get_text_src(uint8_t r) const { return _send_text_scr[r]; }
 
     static const struct AP_Param::GroupInfo var_info[];
     int8_t get_buzz_pin() const  { return _buzzer_pin; }
@@ -247,6 +252,9 @@ private:
     char _send_text[NOTIFY_TEXT_BUFFER_SIZE];
     uint32_t _send_text_updated_millis; // last time text changed
     char _flight_mode_str[5];
+
+    char _send_text_scr[NOTIFY_TEXT_NUM_ROWS][NOTIFY_TEXT_BUFFER_SIZE];
+    uint8_t _send_text_src_override = 0; //Bitmask of what lines send_text_src should override
 
     static NotifyDevice* _devices[];
     static uint8_t _num_devices;

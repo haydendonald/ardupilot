@@ -535,6 +535,13 @@ void AP_Notify::send_text(const char *str)
     _send_text_updated_millis = AP_HAL::millis();
 }
 
+void AP_Notify::send_text_src(const char *str, uint8_t r)
+{
+    BIT_SET(_send_text_src_override, r);
+    strncpy(_send_text_scr[r], str, sizeof(_send_text_scr[r]));
+    _send_text_scr[r][sizeof(_send_text_scr[r])-1] = 0;
+}
+
 // convert 0-3 to 0-100
 int8_t AP_Notify::get_rgb_led_brightness_percent() const
 {

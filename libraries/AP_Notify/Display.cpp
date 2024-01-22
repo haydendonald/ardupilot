@@ -404,15 +404,44 @@ void Display::update()
 
 void Display::update_all()
 {
-    update_text(0);
-    update_mode(1);
-    update_battery(2);
+    if(BIT_IS_SET(pNotify->_send_text_src_override, 0)) {
+        update_text_src(0);
+    } else {
+        update_text(0);
+    }
+
+    if(BIT_IS_SET(pNotify->_send_text_src_override, 1)) {
+        update_text_src(1);
+    } else {
+        update_mode(1);
+    }
+
+    if(BIT_IS_SET(pNotify->_send_text_src_override, 2)) {
+        update_text_src(2);
+    } else {
+        update_battery(2);
+    }
+
 #if AP_GPS_ENABLED
-    update_gps(3);
+    if(BIT_IS_SET(pNotify->_send_text_src_override, 3)) {
+        update_text_src(3);
+    } else {
+        update_gps(3);
+    }
 #endif
-    //update_gps_sats(4);
-    update_prearm(4);
-    update_ekf(5);
+
+    if(BIT_IS_SET(pNotify->_send_text_src_override, 4)) {
+        update_text_src(4);
+    } else {    
+        //update_gps_sats(4);
+        update_prearm(4);
+    }
+
+    if(BIT_IS_SET(pNotify->_send_text_src_override, 5)) {
+        update_text_src(5);
+    } else {    
+        update_ekf(5);
+    }
 }
 
 void Display::draw_text(uint16_t x, uint16_t y, const char* c)
@@ -597,6 +626,35 @@ void Display::update_text(uint8_t r)
     }
 
     draw_text(COLUMN(0), ROW(0), msg);
+ }
+
+ void Display::update_text_src(uint8_t r)
+{
+    char msg [DISPLAY_MESSAGE_SIZE] = {};
+    char txt [NOTIFY_TEXT_BUFFER_SIZE] = {};
+
+    if (_movedelay > 0) {
+        _movedelay--;
+        return;
+    }
+
+    snprintf(txt, sizeof(txt), "%s", pNotify->get_text_src(r));
+
+    memset(msg, ' ', sizeof(msg)-1); // leave null termination
+    const uint8_t len = strlen(&txt[_mstartpos]);
+    const uint8_t to_copy = (len < sizeof(msg)-1) ? len : (sizeof(msg)-1);
+    memcpy(msg, &txt[_mstartpos], to_copy);
+
+    if (len <= sizeof(msg)-1) {
+        // end-of-message reached; pause scrolling a while
+        _movedelay = 4;
+        // reset startpos so we start scrolling from the start again:
+        _mstartpos = 0;
+    } else {
+        _mstartpos++;
+    }
+
+    draw_text(COLUMN(0), ROW(r), msg);
  }
 
 #endif  // HAL_DISPLAY_ENABLED
