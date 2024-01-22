@@ -530,6 +530,7 @@ void AP_Notify::set_flight_mode_str(const char *str)
 
 void AP_Notify::send_text(const char *str, uint8_t r)
 {
+    BIT_SET(_send_text_row_override, r);
     strncpy(_send_text[r], str, sizeof(_send_text[r]));
     _send_text[r][sizeof(_send_text[r])-1] = 0;
     _send_text_updated_millis[r] = AP_HAL::millis();

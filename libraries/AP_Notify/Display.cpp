@@ -404,15 +404,41 @@ void Display::update()
 
 void Display::update_all()
 {
-    update_text(0);
-    update_mode(1);
-    update_battery(2);
+    for(uint8_t i = 0; i < NOTIFY_TEXT_NUM_ROWS; i++) {
+        //If the current row is overriden by update text, then set it to the text
+        if (BIT_IS_SET(pNotify->_send_text_row_override, i))
+        {
+            update_text(i);
+        }
+        //Otherwise update the row with the default text for that row
+        else {
+            switch(i) {
+                case 1: {
+                    update_mode(i);
+                    break;
+                }
+                case 2: {
+                    update_battery(i);
+                    break;
+                }
 #if AP_GPS_ENABLED
-    update_gps(3);
+                case 3: {
+                    update_gps(i);
+                    break;
+                }
 #endif
-    //update_gps_sats(4);
-    update_prearm(4);
-    update_ekf(5);
+                case 4: {
+                    //update_gps_sats(i);
+                    update_prearm(i);
+                    break;
+                }
+                case 5: {
+                    update_ekf(i);
+                    break;
+                }
+            }
+        }
+    }
 }
 
 void Display::draw_text(uint16_t x, uint16_t y, const char* c)
