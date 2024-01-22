@@ -569,7 +569,7 @@ void Display::update_text(uint8_t r)
     char msg [DISPLAY_MESSAGE_SIZE] = {};
     char txt [NOTIFY_TEXT_BUFFER_SIZE] = {};
 
-    const bool text_is_valid = AP_HAL::millis() - pNotify->_send_text_updated_millis < _send_text_valid_millis;
+    const bool text_is_valid = AP_HAL::millis() - pNotify->_send_text_updated_millis[r] < _send_text_valid_millis;
     if (!text_is_valid) {
         update_text_empty(r);
         return;
@@ -580,7 +580,7 @@ void Display::update_text(uint8_t r)
         return;
     }
 
-    snprintf(txt, sizeof(txt), "%s", pNotify->get_text());
+    snprintf(txt, sizeof(txt), "%s", pNotify->get_text(r));
 
     memset(msg, ' ', sizeof(msg)-1); // leave null termination
     const uint8_t len = strlen(&txt[_mstartpos]);
@@ -596,7 +596,7 @@ void Display::update_text(uint8_t r)
         _mstartpos++;
     }
 
-    draw_text(COLUMN(0), ROW(0), msg);
+    draw_text(COLUMN(0), ROW(r), msg);
  }
 
 #endif  // HAL_DISPLAY_ENABLED
