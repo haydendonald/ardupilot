@@ -533,16 +533,19 @@ void Display::update_ekf(uint8_t r)
 void Display::update_battery(uint8_t r)
 {
     char msg [DISPLAY_MESSAGE_SIZE];
-    AP_BattMonitor &battery = AP::battery();
+    AP_BattMonitor *battery = AP_BattMonitor::get_singleton();
+    if (battery == nullptr) {
+        return;
+    }
     uint8_t pct;
-    if (battery.capacity_remaining_pct(pct)) {
-        snprintf(msg, DISPLAY_MESSAGE_SIZE, "BAT:%4.2fV %2d%% ", (double)battery.voltage(), pct) ;
+    if (battery->capacity_remaining_pct(pct)) {
+        snprintf(msg, DISPLAY_MESSAGE_SIZE, "BAT:%4.2fV %2d%% ", (double)battery->voltage(), pct) ;
     } else {
-        snprintf(msg, DISPLAY_MESSAGE_SIZE, "BAT:%4.2fV --%% ", (double)battery.voltage()) ;
+        snprintf(msg, DISPLAY_MESSAGE_SIZE, "BAT:%4.2fV --%% ", (double)battery->voltage()) ;
     }
     draw_text(COLUMN(0), ROW(r), msg);
  }
-
+ 
 void Display::update_mode(uint8_t r)
 {
     char msg [DISPLAY_MESSAGE_SIZE];
