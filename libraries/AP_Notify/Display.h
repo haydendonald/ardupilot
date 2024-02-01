@@ -19,7 +19,7 @@ public:
 
     bool init(void) override;
     void update() override;
-
+    void send_text_blocking(const char *text, uint8_t line) override;
 private:
     void draw_char(uint16_t x, uint16_t y, const char c);
     void draw_text(uint16_t x, uint16_t y, const char *c);
